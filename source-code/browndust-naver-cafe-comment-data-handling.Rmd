@@ -1,0 +1,104 @@
+---
+title: "브라운더스트 공식 네이버카페 코스툼 이벤트 댓글 데이터 처리 및 시각화"
+author: "정진우 (Jinwoo Chung) // contact : chungjinwoo [at] naver.com"
+output: html_document
+---
+
+### 필요한 패키지 불러오기 (importing required packages to local memory)
+```{r}
+library(pacman)
+pacman::p_load(readr,dplyr,highcharter)
+```
+
+### 필요한 데이터 불러오기 (importing data to local memory)
+```{r}
+df.comment <- readr::read_csv('~/Desktop/browndust-related/browndust-costume-event-crawled-comment.csv')
+df.comment$X1 <- NULL # this is index col created from inserting values in pd, it's not needed
+df.comment
+df.unit <- readr::read_csv('~/Desktop/browndust-related/browndust-unit-db.csv')
+df.unit
+```
+
+### 사용자 정의 함수 (User Defined Function)
+```{r}
+reduce_duplicates <- function(dup.userID) {
+  all.dup.index.list <- lapply(dup.userID, function(x) which(df.formal$user_ID %in% x))
+  all.dup.index <- unlist(all.dup.index.list, use.names=FALSE)
+  keeping.index <- vapply(all.dup.index.list, tail, n = 1L, FUN.VALUE = numeric(1))
+  removing.index <- all.dup.index[!(all.dup.index %in% keeping.index)]
+  return(removing.index)
+}
+```
+
+## 데이터 처리 및 시각화 절차 (Data Handling and Visualization Procedure)
+1. 댓글 유형에 맞춘거와 안맞은 유형으로 분리 (Separate comment based on formality)
+2. 반복투표 유저 처리 (Reduce duplicate votes to 1)
+3. 맞은 유형과 반복투표 처리한 자료로 시각화 (Plot with formal + reduced duplicate data)
+
+**1등이 너무 압도적으로 투표를 얻어서, 형식에 안맞은 투표들 처리할 필요가 없음 (Because 1st voted unit won with overwhelming votes, no need to handle informal votes data)**
+
+
+#### 1. 댓글 유형에 맞춘거와 안맞은 유형으로 분리 (Separate comment based on formality)
+```{r}
+df.formal <- df.comment[df.comment$unit_voted %in% df.unit$용병이름,]
+df.informal <- df.comment[!(df.comment$unit_voted %in% df.unit$용병이름),]
+```
+
+#### 2. 반복투표 유저 처리 (Reduce duplicate votes to 1)
+
+반복투표한 유저들 분리 (Separating users who have voted more than once)
+```{r}
+df.duplicate <- df.formal[duplicated(df.formal$user_ID),]
+df.duplicate
+```
+
+반복투표한 유저들 제일 최신투표만 적용 (Only recent vote to be applied, previous comments deleted)
+```{r}
+removing.index <- reduce_duplicates(df.duplicate$user_ID)
+df.formal <- df.formal[-removing.index,]
+head(df.formal)
+```
+
+#### 3. 맞은 유형과 반복투표 처리한 자료로 시각화 (Plot with formal + reduced duplicate data)
+
+총 자료로 시각화 (Full data Visualization)
+```{r}
+df.formal.pie.data <- table(df.formal$unit_voted)
+highchart() %>% 
+ hc_chart(type = "pie") %>% 
+ hc_add_series_labels_values(labels = attributes(df.formal.pie.data)$dimnames[[1]], values = df.formal.pie.data) %>% 
+ hc_tooltip(pointFormat = paste('{point.y} 표<br/><b>{point.percentage:.1f}%</b>')) %>%
+ hc_title(text = "코스튬 투표 현황 (유형 맞춘 투표만 적용)")
+```
+
+데이터가 너무 많아서 투표 10개보다 낮은 투표는 무시 (Due to too much data, removing unit votes less than 10)
+```{r}
+df.formal.pie.data.reformat <- df.formal.pie.data[df.formal.pie.data > 10]
+highchart() %>% 
+ hc_chart(type = "pie") %>% 
+ hc_add_series_labels_values(labels = attributes(df.formal.pie.data.reformat)$dimnames[[1]], values = df.formal.pie.data.reformat) %>% 
+ hc_tooltip(pointFormat = paste('{point.y} 표<br/><b>{point.percentage:.1f}%</b>')) %>%
+ hc_title(text = "코스튬 투표 현황 (유형 맞춘 투표만 적용 + 투표 < 10 용병은 무시)")
+```
+
+#### 유형 안맞은 데이터 보기 (Looking at data that does not fit the formality)
+
+살펴보기 (Taking a glance)
+```{r}
+df.informal
+```
+
+결과 : 일단 대략 다 어느정도 이름은 제데로 입력했지만, 추가로 'ts'나 '!' 같은 텍스트가 추가되있네요...  (After a skim through the informal comments, seems like they did input the unit name, but they added extra texts such as 'ts' and '!')
+
+
+
+
+
+
+
+
+
+
+
+
+
